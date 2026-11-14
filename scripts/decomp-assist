@@ -1,0 +1,5 @@
+#!/bin/sh
+# Launcher: run the decomp_assist CLI from this checkout, whatever the caller's working directory is.
+here=$(cd "$(dirname "$(readlink "$0" || echo "$0")")/.." && pwd)
+cd "$here" || exit 2
+HF_HOME="$here/models/hf" exec "$here/.venv/bin/python" -m decomp_assist "$@"

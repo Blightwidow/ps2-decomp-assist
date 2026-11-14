@@ -1,0 +1,16 @@
+name: ci
+on:
+  push:
+  pull_request:
+jobs:
+  check:
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+      - run: uv venv --link-mode copy
+      - run: uv pip install --link-mode copy -r requirements.lock.txt
+      - run: .venv/bin/ruff format --check decomp_assist eval pipeline tests scripts
+      - run: .venv/bin/ruff check decomp_assist eval pipeline tests scripts
+      - run: .venv/bin/mypy decomp_assist eval pipeline tests scripts
+      - run: .venv/bin/pytest -q tests

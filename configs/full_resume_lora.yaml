@@ -1,0 +1,26 @@
+# Stage 6 resume from step 3000 of full_sft1: remaining 13509 micro-steps, cosine restarted from 9e-5 (optimizer state not restored)
+train: true
+fine_tune_type: lora
+data: data/sft/full
+batch_size: 1
+grad_accumulation_steps: 4
+iters: 13509
+learning_rate: 9.0e-5
+lr_schedule:
+  name: cosine_decay
+  warmup: 20
+  arguments: [9.0e-5, 3377, 0.0]
+num_layers: -1
+max_seq_length: 2048
+mask_prompt: true
+grad_checkpoint: true
+steps_per_report: 40
+steps_per_eval: 1500
+save_every: 1500
+seed: 0
+lora_parameters:
+  rank: 32
+  scale: 2.0
+  dropout: 0.0
+  keys: ["self_attn.q_proj", "self_attn.k_proj", "self_attn.v_proj", "self_attn.o_proj", "mlp.gate_proj", "mlp.up_proj", "mlp.down_proj"]
+clear_cache_threshold: 4294967296
