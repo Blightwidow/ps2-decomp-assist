@@ -38,6 +38,8 @@ scripts/decomp-assist --game sly1 --function func_XXXXXXXX --source nonmatching/
 
 The adapters download from Hugging Face on first run ([blightwidow/ps2-decomp-assist-gemma4-e2b-lora](https://huggingface.co/blightwidow/ps2-decomp-assist-gemma4-e2b-lora)). Use `--adapter` and `--repair-adapter` for local folders. See [docs/USAGE.md](docs/USAGE.md).
 
+Other runtimes: the adapters export to GGUF for llama.cpp; Q8_0 matches the MLX results ([docs/GGUF.md](docs/GGUF.md)).
+
 A Claude Code skill in `.claude/skills/decomp-assist/` lets an agent call the CLI as a tool.
 
 ## Reproduce

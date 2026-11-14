@@ -131,3 +131,16 @@ Zero-shot Claude Haiku (headless `claude -p --model haiku`, no tools, same syste
 | SFT-2 | 16.3% | 22.1% | 25.0% | 80% | 0.498 |
 
 **Read.** Haiku beats the local model on matches (about 15 points EXACT@8 over SFT-1) while compiling less often at @1 (75% vs 85%). The 20-function sample is easier than the 150 (SFT-1 gets 40% here vs 29.3%) and the noise is about +-10 points, so treat it as a rough ordering only. Zero-shot Haiku was not given few-shot examples. The local model's case is therefore offline use, privacy (disc data never leaves the machine) and cost, not accuracy.
+
+## GGUF export fidelity (2026-11-14)
+
+Fused T1 adapter exported to GGUF with llama.cpp (details and commands: `docs/GGUF.md`); same 150 validation functions, n=8, T=0.6, generation through `llama-server`.
+
+| Model | EXACT@1 | @4 | @8 | Compiles@1 | Mean best sim |
+|---|---:|---:|---:|---:|---:|
+| MLX SFT-1 | 19.8% | 26.0% | 29.3% | 68.7% | 0.616 |
+| GGUF bf16 | 20.7% | 27.3% | 30.0% | 66.0% | 0.598 |
+| GGUF Q8_0 | 20.8% | 26.2% | 28.7% | 70.7% | 0.610 |
+| GGUF Q4_K_M | 16.1% | 19.9% | 22.0% | 64.7% | 0.564 |
+
+bf16 and Q8_0 are inside the noise; Q4_K_M loses about 8 points EXACT@8 and is not recommended. llama-server generation was slower than MLX (bf16: 1,413 s vs 1,009 s for the sample).

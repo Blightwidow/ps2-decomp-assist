@@ -175,7 +175,7 @@ e2b-ps2/
 | 6 | Full SFT-1 | adapter, one-axis sweep | beats baselines on val; no collapse | 2-4 d | Complete |
 | 7 | T2 synthetic + SFT-2 (if go) | mutation pipeline; mixed SFT | S4 on real + model-generated failures; no T1 regression | 3-4 d | Complete (S4 not met: repair 9.4% EXACT@8 on unsolved, combined 36.0% vs 29.3%; see EVAL.md) |
 | 8 | RFT (if go) | verified samples; retrain | measured gain or documented plateau | 2-3 d, resized by measurements | Complete (2026-11-14): stopped at documented plateau after sizing pilot; see EVAL.md |
-| 9 | Inference CLI + harness tool | `decomp-assist`, MCP server and/or skill wrapping it, README, S6 run on unmatched sly2, portability export + Linux toolchain check | S5 met | 1-2 d | In Progress: CLI, skill and usage doc done (2026-11-14); S6 run, portability export and Linux toolchain check open. Harness tool is a skill, not MCP (user decision) |
+| 9 | Inference CLI + harness tool | `decomp-assist`, MCP server and/or skill wrapping it, README, S6 run on unmatched sly2, portability export + Linux toolchain check | S5 met | 1-2 d | In Progress: CLI, skill and usage doc done (2026-11-14); GGUF export validated (Q8_0 within noise, see docs/GGUF.md); S6 run and Linux toolchain check open. Harness tool is a skill, not MCP (user decision) |
 
 Stage 0 independent of 1-3; Stage 4 starts once Stage 1 builds.
 

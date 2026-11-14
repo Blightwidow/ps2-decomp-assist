@@ -13,6 +13,7 @@ from pathlib import Path
 from typing import Any
 
 from eval.generate import Generator, build_messages, extract_code
+from eval.generate_server import ServerGenerator
 from eval.metrics import summarize
 from eval.retrieval import Retriever, retarget
 from pipeline.verify import Candidate, verify_candidates
@@ -69,6 +70,7 @@ def main() -> None:
     parser.add_argument("--temperature", type=float, default=0.6)
     parser.add_argument("--shots", type=int, default=2)
     parser.add_argument("--adapter")
+    parser.add_argument("--server-url", help="llama-server URL: generate with the exported GGUF instead of MLX")
     parser.add_argument("--model", default="mlx-community/gemma-4-e2b-it-bf16")
     parser.add_argument("--max-tokens", type=int, default=512)
     parser.add_argument("--workers", type=int, default=6)
@@ -85,7 +87,11 @@ def main() -> None:
         retriever = Retriever(load_split("train"))
         texts_per_row = [[retarget(neighbor, row) for neighbor in retriever.nearest(row, arguments.n)] for row in rows]
     else:
-        generator = Generator(arguments.model, arguments.adapter)
+        generator = (
+            ServerGenerator(arguments.server_url)
+            if arguments.server_url
+            else Generator(arguments.model, arguments.adapter)
+        )
         shot_retriever = Retriever(load_split("train")) if arguments.method == "fewshot" else None
         conversations = [
             build_messages(row, shot_retriever.nearest(row, arguments.shots) if shot_retriever else []) for row in rows

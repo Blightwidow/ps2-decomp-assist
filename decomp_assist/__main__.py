@@ -22,6 +22,7 @@ from decomp_assist.adapters import DEFAULT_ADAPTER, DEFAULT_REPAIR_ADAPTER, reso
 from decomp_assist.loop import Outcome, run_assist
 from decomp_assist.target import TargetError, build_target
 from eval.generate import Generator, extract_code
+from eval.generate_server import ServerGenerator
 from pipeline import verify
 from pipeline.verify import verify_candidates
 
@@ -63,6 +64,8 @@ def main() -> int:
     parser.add_argument("--model", default=DEFAULT_MODEL)
     parser.add_argument("--adapter", default=DEFAULT_ADAPTER)
     parser.add_argument("--repair-adapter", default=DEFAULT_REPAIR_ADAPTER)
+    parser.add_argument("--server-url", help="llama-server with the T1 GGUF: use it instead of MLX for the first round")
+    parser.add_argument("--repair-server-url", help="llama-server with the repair GGUF: use it for repair rounds")
     parser.add_argument("--json", action="store_true", help="print one JSON object")
     arguments = parser.parse_args()
 
@@ -85,8 +88,13 @@ def main() -> int:
 
     generators: dict[str, Generator] = {}
 
-    def sampler(adapter: str):  # type: ignore[no-untyped-def]
+    def sampler(adapter: str, server_url: str | None):  # type: ignore[no-untyped-def]
+        server = ServerGenerator(server_url, parallel=arguments.n) if server_url else None
+
         def sample(messages: list[dict[str, str]], count: int) -> list[str]:
+            if server is not None:
+                served = server.sample([messages], count, arguments.temperature, arguments.max_tokens)[0]
+                return [extract_code(text) for text in served]
             if adapter not in generators:
                 generators.clear()  # one model in memory at a time
                 gc.collect()
@@ -101,8 +109,8 @@ def main() -> int:
 
     outcome = run_assist(
         target.row,
-        sampler(arguments.adapter),
-        sampler(arguments.repair_adapter),
+        sampler(arguments.adapter, arguments.server_url),
+        sampler(arguments.repair_adapter, arguments.repair_server_url),
         verifier,
         arguments.n,
         arguments.rounds,
