@@ -26,3 +26,7 @@ Validation sample (150 functions): 29.3% rule-clean EXACT@8 on the first round, 
 ## Data
 
 `code` and `diff` in the output derive from the disc image. Keep them in the checkout and the local session; the game repos' LEGAL.md forbids posting disc-generated files, hosted chats included.
+
+## Long runs
+
+Wrap bulk runs in `scripts/guarded_run.py` (it kills a job on low RAM) and add `--maximum-seconds N` as a wall-clock limit (exit code 98). The verifier pool also gives up on a worker that does not answer within 180 s and restarts it, so one stuck compile fails one candidate instead of the whole run.

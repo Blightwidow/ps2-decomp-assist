@@ -7,6 +7,7 @@ repo's own toolchain and compared with retail by the repo's own compare code (se
 from __future__ import annotations
 
 import json
+import queue
 import subprocess
 import threading
 import uuid
@@ -96,57 +97,85 @@ def candidate_defines(game: str, candidate_text: str, function_id: str) -> bool:
     return bool(names) and (function_id in names or game == "sly2")
 
 
-class WorkerPool:
-    """One persistent worker process per thread; jobs are JSON lines."""
+JOB_TIMEOUT_SECONDS = 180
 
-    def __init__(self, game: str, size: int = 6) -> None:
+
+class Worker:
+    """One verifier subprocess; a reader thread moves its output lines into a queue so waiting can time out."""
+
+    def __init__(self, game: str) -> None:
+        self.process = subprocess.Popen(
+            [*WORKER_COMMANDS[game], str(REPOSITORIES[game])],
+            stdin=subprocess.PIPE,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.DEVNULL,
+            text=True,
+            bufsize=1,
+        )
+        self.lines: queue.Queue[str | None] = queue.Queue()
+        threading.Thread(target=self._read_lines, daemon=True).start()
+
+    def _read_lines(self) -> None:
+        assert self.process.stdout is not None
+        for line in self.process.stdout:
+            self.lines.put(line)
+        self.lines.put(None)  # end of output: the process exited
+
+    def alive(self) -> bool:
+        return self.process.poll() is None
+
+    def kill(self) -> None:
+        self.process.kill()
+
+
+class WorkerPool:
+    """One persistent worker process per thread; jobs are JSON lines. A reply that takes too long fails the job."""
+
+    def __init__(self, game: str, size: int = 6, timeout_seconds: float = JOB_TIMEOUT_SECONDS) -> None:
         self.game = game
         self.size = size
+        self.timeout_seconds = timeout_seconds
         self._local = threading.local()
-        self._processes: list[subprocess.Popen[str]] = []
+        self._workers: list[Worker] = []
         self._lock = threading.Lock()
 
-    def _worker(self) -> subprocess.Popen[str]:
-        process = getattr(self._local, "process", None)
-        if process is None or process.poll() is not None:
-            process = subprocess.Popen(
-                [*WORKER_COMMANDS[self.game], str(REPOSITORIES[self.game])],
-                stdin=subprocess.PIPE,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.DEVNULL,
-                text=True,
-                bufsize=1,
-            )
-            self._local.process = process
+    def _worker(self) -> Worker:
+        worker: Worker | None = getattr(self._local, "worker", None)
+        if worker is None or not worker.alive():
+            worker = Worker(self.game)
+            self._local.worker = worker
             with self._lock:
-                self._processes.append(process)
-        return process
+                self._workers.append(worker)
+        return worker
 
     def submit(self, job: dict[str, Any]) -> dict[str, Any]:
-        process = self._worker()
-        assert process.stdin is not None and process.stdout is not None
+        worker = self._worker()
+        assert worker.process.stdin is not None
         try:
-            process.stdin.write(json.dumps(job) + "\n")
-            process.stdin.flush()
-            line = process.stdout.readline()
-            if not line:
+            worker.process.stdin.write(json.dumps(job) + "\n")
+            worker.process.stdin.flush()
+            line = worker.lines.get(timeout=self.timeout_seconds)
+            if line is None:
                 raise RuntimeError("worker exited")
             result: dict[str, Any] = json.loads(line)
+            if result.get("id") != job["id"]:
+                raise RuntimeError("reply for another job")
             return result
-        except (OSError, RuntimeError, json.JSONDecodeError) as error:
-            process.kill()
-            self._local.process = None
+        except (OSError, RuntimeError, json.JSONDecodeError, queue.Empty) as error:
+            worker.kill()  # a killed worker cannot answer late and desynchronise the next job
+            self._local.worker = None
+            note = "timeout" if isinstance(error, queue.Empty) else repr(error)
             return {
                 "id": job["id"],
                 "compiled": False,
                 "status": "ERROR",
                 "similarity": 0.0,
-                "note": f"pool: {error!r}"[:200],
+                "note": f"pool: {note}"[:200],
             }
 
     def close(self) -> None:
-        for process in self._processes:
-            process.kill()
+        for worker in self._workers:
+            worker.kill()
 
 
 def build_job(candidate: Candidate, source_text: str, with_diff: bool = False) -> dict[str, Any]:

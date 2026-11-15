@@ -1,7 +1,7 @@
 """Run a command under a memory watchdog: kill its whole process group when available RAM gets critical.
 
 Usage: python scripts/guarded_run.py [--minimum-available-gib 6] -- COMMAND...
-Exit code 99 when the watchdog killed the command.
+Exit code 99 when the watchdog killed the command for low RAM, 98 when it ran past --maximum-seconds.
 """
 
 from __future__ import annotations
@@ -33,15 +33,22 @@ def main() -> None:
     parser.add_argument("--minimum-available-gib", type=float, default=6.0)
     parser.add_argument("--interval-seconds", type=float, default=2.0)
     parser.add_argument("--strikes", type=int, default=2, help="consecutive bad samples before killing")
+    parser.add_argument("--maximum-seconds", type=float, default=0.0, help="wall-clock limit; 0 means none")
     parser.add_argument("command", nargs=argparse.REMAINDER)
     arguments = parser.parse_args()
     command = arguments.command[1:] if arguments.command[:1] == ["--"] else arguments.command
 
     process = subprocess.Popen(command, start_new_session=True)
+    started = time.monotonic()
     strikes = 0
     lowest_available = available_bytes()
     while process.poll() is None:
         time.sleep(arguments.interval_seconds)
+        if arguments.maximum_seconds and time.monotonic() - started > arguments.maximum_seconds:
+            print(f"[watchdog] KILL: ran past {arguments.maximum_seconds:.0f} s", file=sys.stderr, flush=True)
+            os.killpg(process.pid, signal.SIGKILL)
+            process.wait()
+            sys.exit(98)
         available = available_bytes()
         lowest_available = min(lowest_available, available)
         bad = available < arguments.minimum_available_gib * GIBIBYTE
