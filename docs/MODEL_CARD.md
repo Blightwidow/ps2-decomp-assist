@@ -22,6 +22,8 @@ Two LoRA adapters (rank 32) for `mlx-community/gemma-4-e2b-it-bf16` that turn MI
 
 `repair/` continues from `t1/`; it was trained on a mix of repair and translation examples.
 
+`gguf/` holds the same two models fused into the bf16 base and exported for llama.cpp (Q8_0, 4.9 GB each): `gguf/ps2-decomp-assist-t1-Q8_0.gguf` and `gguf/ps2-decomp-assist-repair-Q8_0.gguf`. On 150 validation functions the T1 Q8_0 export scores 28.7% EXACT@8 (MLX adapter: 29.3%, inside the noise). Q4_K_M lost about 8 points and is not published. Serve with `llama-server --jinja --chat-template-kwargs '{"enable_thinking": false}'`; commands and results in the repository's `docs/GGUF.md`.
+
 ## Use
 
 ```
