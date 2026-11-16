@@ -1,4 +1,4 @@
-"""Build the model prompt row and the verifier fields for one function of a local sly1/sly2 checkout."""
+"""Build the model prompt row and the verifier fields for one function of a local sly1/sly2/sly3 checkout."""
 
 from __future__ import annotations
 
@@ -15,7 +15,9 @@ from pipeline.sly1 import load_function_table, load_reverse_names, to_address_na
 from pipeline.sly2 import load_assembly_by_address
 from pipeline.verify import Candidate
 
-SLY1_SYMBOL_PATTERN = re.compile(r"^(?:func_)?(?:0x)?(?P<address>[0-9A-Fa-f]{1,8})$")
+ADDRESS_SYMBOL_PATTERN = re.compile(r"^(?:func_)?(?:0x)?(?P<address>[0-9A-Fa-f]{1,8})$")
+# Games laid out like sly1-decomp: config/us/functions.tsv, asm/us/text.s, func_XXXXXXXX symbols, tools/check.py.
+ADDRESS_SYMBOL_GAMES = frozenset({"sly1", "sly3"})
 
 
 class TargetError(Exception):
@@ -31,6 +33,7 @@ class Target:
     definition_name: str
     definition_ordinal: int
     source_file: str  # relative to the repository
+    definition_text: str = ""  # the function's current definition in the source file: a stub, a draft, a near miss
 
     def candidate(self, text: str) -> Candidate:
         return Candidate(
@@ -49,16 +52,17 @@ def ordinal_of(definition: FunctionDefinition, definitions: list[FunctionDefinit
     return [other.start_byte for other in definitions if other.name == definition.name].index(definition.start_byte)
 
 
-def sly1_symbol(function: str) -> str:
+def address_symbol(game: str, function: str) -> str:
     """``func_XXXXXXXX`` from a symbol or a bare hex address."""
-    match = SLY1_SYMBOL_PATTERN.match(function)
+    match = ADDRESS_SYMBOL_PATTERN.match(function)
     if not match:
-        raise TargetError(f"sly1 function must be func_XXXXXXXX or an address, got {function!r}")
+        raise TargetError(f"{game} function must be func_XXXXXXXX or an address, got {function!r}")
     return f"func_{int(match.group('address'), 16):08X}"
 
 
-def build_sly1_target(repository: Path, function: str, source_file: str) -> Target:
-    symbol = sly1_symbol(function)
+def build_address_symbol_target(game: str, repository: Path, function: str, source_file: str) -> Target:
+    """A target in a sly1-decomp-style repository (sly1, sly3); readable names map back through config/names/."""
+    symbol = address_symbol(game, function)
     function_table = load_function_table(repository)
     if symbol not in function_table:
         raise TargetError(f"{symbol} is not in config/us/functions.tsv")
@@ -82,13 +86,20 @@ def build_sly1_target(repository: Path, function: str, source_file: str) -> Targ
     context = to_address_names(build_context(clean_text, definition.name, chunks), reverse_names)
     assembly_function = assembly_by_name[symbol]
     row = {
-        "game": "sly1",
+        "game": game,
         "function_id": symbol,
         "size_bytes": int(table_row["size"]),
         "context": context,
         "assembly": normalize_assembly(assembly_function),
     }
-    return Target(row, int(table_row["address"], 16), definition.name, ordinal_of(definition, definitions), source_file)
+    return Target(
+        row,
+        int(table_row["address"], 16),
+        definition.name,
+        ordinal_of(definition, definitions),
+        source_file,
+        clean_text.strip(),
+    )
 
 
 def read_manifest(path: Path) -> list[dict[str, str]]:
@@ -134,21 +145,21 @@ def build_sly2_target(repository: Path, function: str, source_file: str | None) 
         "context": build_context(clean_text, definition.name, chunks),
         "assembly": normalize_assembly(assembly_function),
     }
-    return Target(row, address, definition.name, ordinal_of(definition, definitions), source_file)
+    return Target(row, address, definition.name, ordinal_of(definition, definitions), source_file, clean_text)
 
 
 def build_target(game: str, repository: Path, function: str, source_file: str | None = None) -> Target:
-    """The target for ``function`` (sly1: ``func_XXXXXXXX`` or address; sly2: name or ``0x`` address).
+    """The target for ``function`` (sly1, sly3: ``func_XXXXXXXX`` or address; sly2: name or ``0x`` address).
 
     ``source_file`` (relative to the repository) must already hold one definition of the function: the staged
-    ``nonmatching/`` attempt, or the shared file it lives in. It defaults to the sly2 manifest entry; sly1 needs it.
+    ``nonmatching/`` attempt, or the shared file it lives in. It defaults to the sly2 manifest entry; sly1 and sly3 need it.
     """
-    if game == "sly1":
+    if game in ADDRESS_SYMBOL_GAMES:
         if source_file is None:
             raise TargetError(
-                "sly1 needs --source: the file that holds the function (e.g. nonmatching/func_XXXXXXXX.cpp)"
+                f"{game} needs --source: the file that holds the function (e.g. nonmatching/func_XXXXXXXX.cpp)"
             )
-        return build_sly1_target(repository, function, source_file)
+        return build_address_symbol_target(game, repository, function, source_file)
     if game == "sly2":
         return build_sly2_target(repository, function, source_file)
     raise TargetError(f"unknown game {game!r}")

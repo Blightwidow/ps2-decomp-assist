@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -49,13 +49,35 @@ def repair_messages(row: dict[str, Any], candidate: str, result: dict[str, Any])
 
 
 def run_assist(
-    row: dict[str, Any], sample: Sampler, sample_repair: Sampler, verify: Verifier, n: int, rounds: int
+    row: dict[str, Any],
+    sample: Sampler,
+    sample_repair: Sampler,
+    verify: Verifier,
+    n: int,
+    rounds: int,
+    seeds: Sequence[str] = (),
 ) -> Outcome:
-    """First round: ``n`` samples of the plain prompt. Each later round: ``n`` repairs of the closest failure so far."""
+    """First round: ``n`` samples of the plain prompt. Each later round: ``n`` repairs of the closest failure so far.
+
+    ``seeds`` (the source's current definition, an m2c draft) are verified before any sampling: a seed that matches is
+    returned without calling the model; otherwise the seeds compete with the first round for the closest attempt, so a
+    repair round can start from one.
+    """
+    seed_texts = [text for text in seeds if text.strip()]
+    tried = 0
+    best = None
+    if seed_texts:
+        seed_results = verify(seed_texts)
+        tried = len(seed_texts)
+        best = best_attempt(seed_texts, seed_results)
+        if best is not None and is_match(best[1]):
+            return Outcome("exact", best[0], 1.0, "", 0, tried, ["a seed matched: the model was not called"])
     texts = sample(build_messages(row, []), n)
     results = verify(texts)
-    tried = len(texts)
-    best = best_attempt(texts, results)
+    tried += len(texts)
+    sampled = best_attempt(texts, results)
+    if sampled is not None and (best is None or rank(sampled[1]) > rank(best[1])):
+        best = sampled
     used = 0
     while best is not None and not is_match(best[1]) and used < rounds:
         used += 1
