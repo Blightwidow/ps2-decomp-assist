@@ -1,4 +1,4 @@
-"""CLI: ``python -m decomp_assist --game sly1|sly2 --function FUNC [--source FILE]``.
+"""CLI: ``python -m decomp_assist --game sly1|sly2|sly3 --function FUNC [--source FILE]``.
 
 Samples candidates from the fine-tuned model, verifies each with the repo's own compiler and comparer, repairs the
 closest failure for a few rounds, and prints one JSON object (``--json``) or a short report. Only an ``exact``
@@ -28,7 +28,7 @@ from pipeline.verify import verify_candidates
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 DEFAULT_MODEL = "mlx-community/gemma-4-e2b-it-bf16"
-WORKER_PYTHON = {"sly1": "venv/bin/python", "sly2": ".venv/bin/python"}
+WORKER_PYTHON = {"sly1": "venv/bin/python", "sly2": ".venv/bin/python", "sly3": "venv/bin/python"}
 
 
 def use_repository(game: str, repository: Path) -> None:
@@ -52,8 +52,10 @@ def format_report(outcome: Outcome, function: str) -> str:
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument("--game", required=True, choices=["sly1", "sly2"])
-    parser.add_argument("--function", required=True, help="sly1: func_XXXXXXXX or address; sly2: name or 0xADDRESS")
+    parser.add_argument("--game", required=True, choices=["sly1", "sly2", "sly3"])
+    parser.add_argument(
+        "--function", required=True, help="sly1, sly3: func_XXXXXXXX or address; sly2: name or 0xADDRESS"
+    )
     parser.add_argument("--source", help="file (relative to the repository) holding one definition of the function")
     parser.add_argument("--repository", help="checkout of the game's decomp repo (default: data/raw/<game>-decomp)")
     parser.add_argument("--n", type=int, default=8, help="samples per round")
@@ -66,6 +68,11 @@ def main() -> int:
     parser.add_argument("--repair-adapter", default=DEFAULT_REPAIR_ADAPTER)
     parser.add_argument("--server-url", help="llama-server with the T1 GGUF: use it instead of MLX for the first round")
     parser.add_argument("--repair-server-url", help="llama-server with the repair GGUF: use it for repair rounds")
+    parser.add_argument(
+        "--no-seed",
+        action="store_true",
+        help="do not try the source's current definition (stub, m2c draft, near miss) before sampling",
+    )
     parser.add_argument("--json", action="store_true", help="print one JSON object")
     arguments = parser.parse_args()
 
@@ -114,6 +121,7 @@ def main() -> int:
         verifier,
         arguments.n,
         arguments.rounds,
+        seeds=() if arguments.no_seed else (target.definition_text,),
     )
     if arguments.json:
         print(json.dumps({"function": target.row["function_id"], **dataclasses.asdict(outcome)}))

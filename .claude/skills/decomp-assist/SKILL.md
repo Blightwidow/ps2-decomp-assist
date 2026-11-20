@@ -1,6 +1,6 @@
 ---
 name: decomp-assist
-description: Decompile a small unmatched Sly Cooper function (sly1 or sly2, at most 400 bytes) with the local fine-tuned model. Runs sample, verify, repair against the repo's own compiler and returns verified rule-clean C++ or the closest attempt with its instruction diff. Use for a function in nonmatching/, or any function whose source file already holds a stub definition.
+description: Decompile a small unmatched Sly Cooper function (sly1, sly2 or sly3, at most 400 bytes) with the local fine-tuned model. Runs sample, verify, repair against the repo's own compiler and returns verified rule-clean C++ or the closest attempt with its instruction diff. Use for a function in nonmatching/, or any function whose source file already holds a stub definition.
 ---
 
 # decomp-assist
@@ -14,11 +14,13 @@ A local model (Gemma 4 E2B, LoRA) proposes C++ for one function; the game repo's
 ```
 scripts/decomp-assist --game sly2 --function func_XXXXXXXX --json
 scripts/decomp-assist --game sly1 --function func_XXXXXXXX --source nonmatching/func_XXXXXXXX.cpp --json
+scripts/decomp-assist --game sly3 --function func_XXXXXXXX --source nonmatching/func_XXXXXXXX.cpp --json
 ```
 
-- `--source` is a path relative to the game repo. It must already hold one definition of the function (the staged `nonmatching/` attempt, or the shared file it lives in). sly2 finds it from the manifests; sly1 always needs it.
+- `--source` is a path relative to the game repo. It must already hold one definition of the function (the staged `nonmatching/` attempt, or the shared file it lives in). sly2 finds it from the manifests; sly1 and sly3 always need it.
 - `--repository PATH` points at another checkout of the game repo; the default is `data/raw/<game>-decomp` in the e2b-ps2 checkout.
 - Defaults: 8 samples per round, 2 repair rounds; adapters come from Hugging Face on first run (`--adapter` and `--repair-adapter` take local folders). A run on a small function takes seconds to a few minutes. One run at a time: it loads the model into memory.
+- The definition already in `--source` is tried first, and matches without loading the model when it is already exact. Put an m2c draft there (unknown `?` types as `s32`) to give the model a starting point: it also joins the first round, so repair can start from it. `--no-seed` skips it.
 - Exit code 0 means `exact`, 1 means `closest` or `none`, 2 means the target could not be built (the message says why).
 
 ## Read the result

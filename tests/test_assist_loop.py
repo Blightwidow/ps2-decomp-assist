@@ -63,3 +63,30 @@ def test_exact_but_rule_breaking_is_not_a_match() -> None:
 def test_repair_prompt_carries_the_diff_of_the_failed_candidate() -> None:
     messages = repair_messages(ROW, "bad", result(diff="x | y"))
     assert "CANDIDATE:\nbad\nDIFF:\nx | y" in messages[1]["content"]
+
+
+def test_matching_seed_returns_without_calling_the_model() -> None:
+    def never(messages: list[dict[str, str]], n: int) -> list[str]:
+        raise AssertionError("the model was called")
+
+    outcome = run_assist(ROW, never, never, scripted_verifier({"draft": result(exact=True)}), 1, 2, seeds=["draft"])
+    assert (outcome.status, outcome.code, outcome.candidates_tried) == ("exact", "draft", 1)
+
+
+def test_closer_seed_is_the_one_repaired() -> None:
+    repaired: list[str] = []
+
+    def repair(messages: list[dict[str, str]], n: int) -> list[str]:
+        repaired.append(messages[1]["content"])
+        return ["fixed"]
+
+    table = {"draft": result(similarity=0.9), "sampled": result(similarity=0.2), "fixed": result(exact=True)}
+    run_assist(ROW, lambda m, n: ["sampled"], repair, scripted_verifier(table), 1, 1, seeds=["draft"])
+    assert "CANDIDATE:\ndraft\n" in repaired[0]
+
+
+def test_blank_seed_is_ignored() -> None:
+    outcome = run_assist(
+        ROW, lambda m, n: ["good"], lambda m, n: [], scripted_verifier({"good": result(exact=True)}), 1, 0, seeds=[" "]
+    )
+    assert (outcome.code, outcome.candidates_tried) == ("good", 1)

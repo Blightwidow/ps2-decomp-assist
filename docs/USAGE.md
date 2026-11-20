@@ -1,19 +1,22 @@
 # Using decomp-assist
 
-Local assistant for matching decompilation of small functions (at most 400 bytes) in sly1-decomp and sly2-decomp. Mac with Apple silicon, MLX. The game repos must be checked out and set up (their `setup.sh`), by default under `data/raw/`.
+Local assistant for matching decompilation of small functions (at most 400 bytes) in sly1-decomp, sly2-decomp and sly3-decomp. Mac with Apple silicon, MLX. The game repos must be checked out and set up (their `setup.sh`), by default under `data/raw/`.
 
 ## CLI
 
 ```
 scripts/decomp-assist --game sly2 --function func_XXXXXXXX
 scripts/decomp-assist --game sly1 --function func_XXXXXXXX --source nonmatching/func_XXXXXXXX.cpp
+scripts/decomp-assist --game sly3 --function func_XXXXXXXX --source nonmatching/func_XXXXXXXX.cpp
 ```
 
-Flow: build the prompt from the checkout (asm plus declarations context) -> sample 8 candidates (T1 adapter, downloaded from Hugging Face on first run; `--adapter runs/full_sft1b` for a local one) -> verify each with the repo's compiler, comparer and rule checks -> if none is a rule-clean EXACT, repair the closest failure with the SFT-2 adapter (repair adapter, `--repair-adapter runs/sft2` for a local one) for up to 2 rounds, feeding it the instruction diff or compiler error. Options: `--n`, `--rounds`, `--temperature`, `--repository`, `--json`, `--adapter`, `--repair-adapter`.
+Flow: build the prompt from the checkout (asm plus declarations context) -> verify the source's current definition (a stub, an m2c draft with unknown types filled in, a near miss) and stop if it is already a rule-clean EXACT, without loading the model; otherwise it joins the first round (`--no-seed` turns this off) -> sample 8 candidates (T1 adapter, downloaded from Hugging Face on first run; `--adapter runs/full_sft1b` for a local one) -> verify each with the repo's compiler, comparer and rule checks -> if none is a rule-clean EXACT, repair the closest failure with the SFT-2 adapter (repair adapter, `--repair-adapter runs/sft2` for a local one) for up to 2 rounds, feeding it the instruction diff or compiler error. Options: `--n`, `--rounds`, `--temperature`, `--repository`, `--json`, `--adapter`, `--repair-adapter`.
 
 Only `status: exact` is a verified match, and it still needs the repo's full build before a commit. `closest` carries the diff and similarity. Exit code 0 exact, 1 closest or none, 2 target error.
 
-`--source` must name a file that already holds one definition of the function (a staged `nonmatching/` attempt or the shared file). sly2 resolves it from `nonmatching/MANIFEST.tsv` or `src/MANIFEST.tsv`.
+`--source` must name a file that already holds one definition of the function (a staged `nonmatching/` attempt or the shared file). sly2 resolves it from `nonmatching/MANIFEST.tsv` or `src/MANIFEST.tsv`; sly1 and sly3 always need it.
+
+sly3 (sly3-decomp) uses sly1-decomp's layout and tools, so it goes through the sly1 path with its own worker (`eval/workers/sly3_worker.py`). The model was not trained on sly3: expect lower match rates than the figures below.
 
 ## Skill
 

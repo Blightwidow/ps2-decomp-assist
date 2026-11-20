@@ -24,6 +24,7 @@ PROJECT_ROOT = Path(__file__).resolve().parent.parent
 REPOSITORIES = {
     "sly1": PROJECT_ROOT / "data" / "raw" / "sly1-decomp",
     "sly2": PROJECT_ROOT / "data" / "raw" / "sly2-decomp",
+    "sly3": PROJECT_ROOT / "data" / "raw" / "sly3-decomp",
 }
 WORKER_COMMANDS = {
     "sly1": [
@@ -34,7 +35,13 @@ WORKER_COMMANDS = {
         str(PROJECT_ROOT / "data" / "raw" / "sly2-decomp" / ".venv" / "bin" / "python"),
         str(PROJECT_ROOT / "eval" / "workers" / "sly2_worker.py"),
     ],
+    "sly3": [
+        str(PROJECT_ROOT / "data" / "raw" / "sly3-decomp" / "venv" / "bin" / "python"),
+        str(PROJECT_ROOT / "eval" / "workers" / "sly3_worker.py"),
+    ],
 }
+# Games laid out like sly1-decomp: func_XXXXXXXX symbols, readable names in config/names/, one source file per job.
+ADDRESS_SYMBOL_GAMES = frozenset({"sly1", "sly3"})
 HUNGARIAN_PATTERN = r"\b(?:psw|plo|grf|pso|ppo)[A-Z]\w*"
 
 
@@ -48,7 +55,7 @@ class Candidate:
     size_bytes: int
     definition_name: str  # the function's name as written in the original source
     definition_ordinal: int  # among same-named definitions (overloads)
-    source_file: str  # relative to the repository (src/main/x.cpp for sly1, src/<module>/x.cpp for sly2)
+    source_file: str  # relative to the repository (src/main/x.cpp for sly1/sly3, src/<module>/x.cpp for sly2)
     text: str
 
 
@@ -64,7 +71,7 @@ def splice_candidate(
     """The original file with the target function replaced by the candidate; None when the target is not found."""
     repository = repository or REPOSITORIES[game]
     source_text = (repository / source_file).read_text(errors="replace")
-    reverse_names = load_reverse_names(repository) if game == "sly1" else {}
+    reverse_names = load_reverse_names(repository) if game in ADDRESS_SYMBOL_GAMES else {}
     definitions = find_function_definitions(source_text)
     matching = (
         [definition for definition in definitions if definition.name == definition_name] if definition_name else []
@@ -76,7 +83,7 @@ def splice_candidate(
             if function_id
             in {
                 definition.name,
-                to_address_names(definition.name, reverse_names) if game == "sly1" else definition.name,
+                to_address_names(definition.name, reverse_names) if game in ADDRESS_SYMBOL_GAMES else definition.name,
             }
         ]
     if not matching and game == "sly2" and len(definitions) == 1:
@@ -185,7 +192,7 @@ def build_job(candidate: Candidate, source_text: str, with_diff: bool = False) -
         "source_text": source_text,
         "with_diff": with_diff,
     }
-    if candidate.game == "sly1":
+    if candidate.game in ADDRESS_SYMBOL_GAMES:
         job["source_file"] = candidate.source_file
     else:
         candidate_definitions = find_function_definitions(candidate.text)
@@ -209,7 +216,7 @@ def verify_candidates(candidates: list[Candidate], workers: int = 6, with_diff: 
 
     def verify_one(candidate: Candidate) -> dict[str, Any]:
         rule_hits = scan_rules(candidate.text)
-        if game == "sly1":
+        if game in ADDRESS_SYMBOL_GAMES:
             import re
 
             if re.search(HUNGARIAN_PATTERN, candidate.text):
